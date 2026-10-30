@@ -82,6 +82,55 @@ async function firestoreRequest(env, path, options = {}) {
   return body
 }
 
+async function requireAdmin(user, env) {
+  const profile = await firestoreRequest(env, `users/${user.uid}`)
+  const role = decodeFirestoreValue(profile.fields?.role)
+  if (role !== 'admin') throw new Error('Admin access is required to upload product images.')
+}
+
+async function uploadProductImage(request, env) {
+  const user = await verifyFirebaseUser(request, env);
+  await requireAdmin(user, env);
+
+  if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
+    throw new Error('Cloudinary is not fully configured on the Worker.');
+  }
+
+  const incoming = await request.formData();
+  const image = incoming.get('image');
+
+  if (!(image instanceof File)) throw new Error('Choose an image to upload.');
+  if (!image.type.startsWith('image/')) throw new Error('Only image files can be uploaded.');
+  if (image.size > 8 * 1024 * 1024) throw new Error('Image exceeds the 8 MB limit.');
+
+  const form = new FormData();
+  form.append('file', image, image.name || 'product-image');
+
+  // Backend Basic Authentication keeps the API secret inside the Worker.
+  const credentials = btoa(`${env.CLOUDINARY_API_KEY}:${env.CLOUDINARY_API_SECRET}`);
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(env.CLOUDINARY_CLOUD_NAME)}/image/upload`,
+    {
+      method: 'POST',
+      headers: { authorization: `Basic ${credentials}` },
+      body: form,
+    }
+  );
+
+  const responseText = await response.text();
+  let result = {};
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Cloudinary returned an unreadable response (HTTP ${response.status}).`);
+  }
+
+  if (!response.ok || !result.secure_url) {
+    throw new Error(result.error?.message || `Cloudinary upload failed (HTTP ${response.status}).`);
+  }
+
+  return { url: result.secure_url };
+}
 async function createCheckout(request, env) {
   const user = await verifyFirebaseUser(request, env)
   const body = await request.json()
@@ -172,13 +221,20 @@ async function handleWebhook(request, env) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('origin') || ''
-    const headers = cors(origin, env.ALLOWED_ORIGIN || 'http://localhost:5173')
+    const allowedOrigin = env.ALLOWED_ORIGIN || 'http://localhost:5173'
+    const headers = cors(origin, allowedOrigin)
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers })
     const url = new URL(request.url)
     try {
       if (url.pathname === '/webhook' && request.method === 'POST') return await handleWebhook(request, env)
+      if (request.method === 'POST' && origin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, headers)
+      if (url.pathname === '/upload-image' && request.method === 'POST') {
+        if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET || !env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_WEB_API_KEY || !env.FIREBASE_PROJECT_ID) {
+          return json({ error: 'Image upload service is not configured yet.' }, 503, headers)
+        }
+        return json(await uploadProductImage(request, env), 200, headers)
+      }
       if (url.pathname === '/create-checkout-session' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.STRIPE_SECRET_KEY || !env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FRONTEND_URL) return json({ error: 'Payment service is not configured yet.' }, 503, headers)
         return json(await createCheckout(request, env), 200, headers)
       }

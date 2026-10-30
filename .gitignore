@@ -1,6 +1,6 @@
-node_modules
-dist
+node_modules/
 .env
-.env.local
-.firebase
-.DS_Store
+.env.*
+!.env.example
+payment-worker/.dev.vars
+*.json.key

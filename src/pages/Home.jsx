@@ -1,37 +1,52 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, ShieldCheck, Truck, Wrench } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BadgeCheck, Boxes, ShieldCheck, Truck, Wrench } from 'lucide-react'
 import { motion } from 'framer-motion'
 import ProductCard from '../components/ProductCard'
 import { getProducts } from '../lib/data'
+
 const fallback = [
- {id:'sample-1',name:'Precision Ratchet Set',price:2450,category:'Hand tools',available_quantity:18,images:['https://images.unsplash.com/photo-1581147036324-c1c9d8a6d2a5?w=900']},
- {id:'sample-2',name:'Workshop Power Drill',price:6800,category:'Power tools',available_quantity:9,images:['https://images.unsplash.com/photo-1504148455328-c376907d081c?w=900']},
- {id:'sample-3',name:'Heavy Duty Tool Kit',price:4200,category:'Tool sets',available_quantity:12,images:['https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=900']}
 ]
+const benefits = [
+  [ShieldCheck, 'Quality-minded selection', 'Practical equipment chosen for dependable everyday performance.'],
+  [Truck, 'A smoother order experience', 'Straightforward ordering and a place to keep track of your purchases.'],
+  [Wrench, 'Ready for real work', 'Useful essentials for repairs, projects and busy workshops.']
+]
+
 export default function Home() {
- const [products,setProducts]=useState([])
- useEffect(()=>{getProducts().then(setProducts).catch(()=>setProducts([]))},[])
- const items=products.length?products.slice(0,3):fallback
- return <div>
-  <section className="max-w-7xl mx-auto px-5 pt-10 md:pt-16">
-   <div className="relative overflow-hidden rounded-[28px] bg-ink min-h-[560px] md:min-h-[600px] grid lg:grid-cols-[1fr_.9fr]">
-    <div className="relative z-10 p-8 md:p-16 flex flex-col justify-center">
-     <p className="text-safety text-xs font-bold tracking-[.24em] uppercase mb-7">Equipment for the everyday expert</p>
-     <h1 className="font-display text-paper text-5xl md:text-7xl font-bold leading-[.98] tracking-[-.055em] max-w-xl">Make good work.<br/><span className="text-safety">With better tools.</span></h1>
-     <p className="text-white/60 max-w-md mt-7 leading-7">Thoughtfully selected tools and workshop essentials built to show up, work hard and last.</p>
-     <div className="flex flex-wrap gap-3 mt-9"><Link to="/products" className="bg-safety text-white rounded-full px-7 py-4 font-bold text-sm inline-flex items-center gap-3">Explore products <ArrowUpRight size={17}/></Link><Link to="/about" className="border border-white/25 text-white rounded-full px-7 py-4 font-bold text-sm">Why HandyMan</Link></div>
-     <div className="mt-14 flex gap-8 text-white/55 text-xs"><span>01 / QUALITY FIRST</span><span>02 / BUILT TO LAST</span></div>
-    </div>
-    <div className="relative min-h-[280px] lg:min-h-full"><img src="https://images.unsplash.com/photo-1581147036324-c1c9d8a6d2a5?w=1400" alt="Professional tools arranged in a workshop" className="absolute inset-0 w-full h-full object-cover opacity-90"/><div className="absolute inset-0 bg-gradient-to-r from-ink via-transparent to-transparent"/></div>
-    <div className="absolute right-7 top-7 hidden md:block border border-white/20 rounded-full w-24 h-24 text-white text-[9px] tracking-widest uppercase flex items-center justify-center text-center rotate-12">Tools<br/>that work<br/>as hard as you</div>
-   </div>
-  </section>
-  <section className="max-w-7xl mx-auto px-5 py-20 md:py-28">
-   <div className="flex flex-wrap justify-between items-end gap-5 mb-10"><div><p className="eyebrow">THE SHORTLIST</p><h2 className="section-title">Tools worth<br className="sm:hidden"/> making room for.</h2></div><Link to="/products" className="text-sm font-bold border-b border-ink pb-2">View all products ↗</Link></div>
-   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-7">{items.map((p,i)=><ProductCard key={p.id} product={p} index={i}/>)}</div>
-   {!products.length && <p className="text-xs text-muted mt-5">Showing preview products until your Firebase catalogue is populated.</p>}
-  </section>
-  <section className="bg-[#e9e8e0] py-16"><div className="max-w-7xl mx-auto px-5 grid md:grid-cols-3 gap-8">{[[ShieldCheck,'Quality you can trust','Practical equipment selected for dependable performance.'],[Truck,'Order with confidence','Clear order tracking and straightforward support.'],[Wrench,'Made for real work','From daily repairs to demanding workshop jobs.']].map(([Icon,title,desc])=><div key={title} className="flex gap-4"><div className="bg-paper rounded-2xl p-4 h-fit"><Icon className="text-safety"/></div><div><h3 className="font-display font-bold text-lg">{title}</h3><p className="text-sm text-muted mt-2 leading-6">{desc}</p></div></div>)}</div></section>
- </div>
+  const [products, setProducts] = useState([])
+  useEffect(() => { getProducts().then(setProducts).catch(() => setProducts([])) }, [])
+  const items = products.length ? products.slice(0, 3) : fallback
+  return <div className="home-page">
+    <section className="hero-wrap"><div className="hero-grid">
+      <div className="hero-copy">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .5 }} className="hero-kicker"><span className="hero-kicker-dot"/> EQUIPMENT FOR PEOPLE WHO GET IT DONE</motion.div>
+        <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6, delay: .08 }}>Make every<span> job count.</span></motion.h1>
+        <motion.p className="hero-description" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6, delay: .16 }}>The tools you reach for. The quality you can rely on. Workshop essentials selected for people who take pride in the work.</motion.p>
+        <motion.div className="hero-actions" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6, delay: .24 }}>
+          <Link to="/products" className="hero-primary">Explore the collection <ArrowUpRight size={18}/></Link>
+          <Link to="/products" className="hero-secondary">Browse tools <ArrowDownRight size={17}/></Link>
+        </motion.div>
+        <div className="hero-meta"><div><strong>01</strong><span>BUILT FOR DAILY USE</span></div><div><strong>02</strong><span>NO-NONSENSE ESSENTIALS</span></div></div>
+      </div>
+      <div className="hero-visual">
+        <img src="https://images.unsplash.com/photo-1669582389450-67a661bccde0?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D" alt="Carefully arranged professional tools in a workshop" fetchPriority="high"/>
+        <div className="hero-image-shade"/>
+        <div className="hero-stamp"><span>THE RIGHT TOOL</span><strong>changes<br/>the work.</strong><span className="stamp-line"/><small>HANDYMAN TOOLS · EST. FOR MAKERS</small></div>
+        <div className="hero-image-index"><span>01</span> / THE WORKSHOP EDIT</div>
+        <div className="hero-floating-card"><div className="floating-icon"><BadgeCheck size={19}/></div><div><strong>Chosen with purpose</strong><span>Tools for the long run</span></div></div>
+      </div>
+    </div><div className="hero-bottomline"><span>GOOD WORK STARTS HERE</span><span className="hero-bottom-mark"><Boxes size={15}/> TOOLS · WORKSHOP · EVERYDAY</span></div></section>
+
+    <section className="featured-section"><div className="section-heading-row"><div><p className="eyebrow">THE SHORTLIST</p><h2 className="section-title">Useful tools.<br className="sm:hidden"/> Serious potential.</h2><p className="section-intro">A few workshop favourites worth a closer look.</p></div><Link to="/products" className="text-link">View all products <ArrowUpRight size={16}/></Link></div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7">{items.map((p, i) => <ProductCard key={p.id} product={p} index={i}/>)}</div>
+      {!products.length && <p className="text-xs text-muted mt-5">Preview items are shown until your Firebase catalogue is populated.</p>}
+    </section>
+
+    <section className="benefits-section"><div className="benefits-heading"><p className="eyebrow">THE HANDYMAN STANDARD</p><h2>Less fuss.<br/>More getting it done.</h2></div><div className="benefits-grid">
+      {benefits.map(([Icon, title, desc], i) => <article className="benefit-card" key={title}><span className="benefit-number">0{i + 1}</span><div className="benefit-icon"><Icon size={21}/></div><h3>{title}</h3><p>{desc}</p></article>)}
+    </div></section>
+
+    <section className="closing-cta"><div><p className="eyebrow">YOUR NEXT PROJECT STARTS HERE</p><h2>Find the tool.<br/><span>Get to work.</span></h2></div><Link to="/products" className="closing-cta-link">Shop the collection <ArrowUpRight size={18}/></Link></section>
+  </div>
 }

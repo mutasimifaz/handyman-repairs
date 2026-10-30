@@ -1,20 +1,48 @@
+import { auth } from '../firebase'
+
+const WORKER_URL = import.meta.env.VITE_UPLOAD_WORKER_URL || 'https://handyman-payment-worker.studentifaz.workers.dev'
+
 export async function uploadImages(files, onProgress = () => {}) {
-  const key = import.meta.env.VITE_IMGBB_API_KEY
-  if (!key) throw new Error('Add VITE_IMGBB_API_KEY to your .env file first.')
   const list = Array.from(files || [])
   if (!list.length) return []
-  const urls = []
-  for (let i = 0; i < list.length; i++) {
-    const file = list[i]
-    if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image.`)
-    if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} exceeds 8 MB.`)
-    const form = new FormData()
-    form.append('image', file)
-    const response = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: form })
-    const result = await response.json()
-    if (!response.ok || !result.success) throw new Error(result.error?.message || `Could not upload ${file.name}`)
-    urls.push(result.data.display_url || result.data.url)
-    onProgress(Math.round(((i + 1) / list.length) * 100))
+
+  const user = auth.currentUser
+  if (!user) throw new Error('Please sign in again before uploading images.')
+
+  const token = await user.getIdToken()
+  const uploaded = new Array(list.length)
+  let completed = 0
+  let nextIndex = 0
+  const concurrency = Math.min(3, list.length)
+
+  async function uploadNext() {
+    while (true) {
+      const index = nextIndex++
+      if (index >= list.length) return
+      const file = list[index]
+
+      if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image.`)
+      if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} exceeds 8 MB.`)
+
+      const body = new FormData()
+      body.append('image', file, file.name)
+
+      const response = await fetch(`${WORKER_URL}/upload-image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.url) {
+        throw new Error(result.error || `Could not upload ${file.name}.`)
+      }
+
+      uploaded[index] = result.url
+      completed += 1
+      onProgress(Math.round((completed / list.length) * 100))
+    }
   }
-  return urls
+
+  await Promise.all(Array.from({ length: concurrency }, () => uploadNext()))
+  return [...new Set(uploaded)]
 }
