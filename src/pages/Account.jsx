@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { getUserOrders, getProfile } from '../lib/data'
+import { Link } from 'react-router-dom'
+export default function Account(){
+ const {user,profile}=useAuth();const [orders,setOrders]=useState([]),[loading,setLoading]=useState(true)
+ useEffect(()=>{if(user)getUserOrders(user.uid).then(setOrders).catch(console.error).finally(()=>setLoading(false))},[user])
+ return <div className="max-w-7xl mx-auto px-5 py-14"><p className="eyebrow">YOUR WORKSPACE</p><h1 className="font-display text-5xl font-bold mt-2">Hello, {profile?.name||user?.displayName||'maker'}.</h1><p className="text-muted mt-3">Here’s what’s happening with your orders.</p>
+ <div className="mt-12 grid md:grid-cols-[.7fr_1.3fr] gap-8"><aside className="bg-ink text-white rounded-2xl p-7 h-fit"><p className="text-white/50 text-xs uppercase tracking-widest">Account</p><p className="font-display text-xl font-bold mt-3">{user?.displayName||'Customer'}</p><p className="text-white/55 text-sm mt-1">{user?.email}</p>{profile?.role==='admin'&&<Link to="/admin" className="block mt-7 text-safety font-bold text-sm">Open admin dashboard ↗</Link>}</aside>
+ <section><h2 className="font-display text-2xl font-bold">Order history</h2>{loading?<p className="py-10 text-muted">Loading orders…</p>:orders.length?<div className="grid gap-3 mt-5">{orders.map(o=><article key={o.id} className="bg-white border border-line rounded-2xl p-5 flex flex-wrap justify-between gap-4"><div><p className="font-bold">{o.productName}</p><p className="text-xs text-muted mt-1">Quantity: {o.quantity} · Order #{o.id.slice(0,8)}</p></div><div className="text-right"><p className="font-display font-bold">৳{Number(o.total).toLocaleString()}</p><p className="text-xs capitalize text-safety mt-1">{o.status} · {o.paymentStatus}</p></div></article>)}</div>:<div className="mt-5 bg-white border border-line rounded-2xl p-10 text-center"><p className="font-display text-xl font-bold">No orders yet</p><p className="text-sm text-muted mt-2">Your next workshop essential is waiting.</p><Link to="/products" className="inline-block mt-5 bg-ink text-white rounded-full px-6 py-3 text-sm font-bold">Browse products</Link></div>}</section></div>
+ </div>
+}

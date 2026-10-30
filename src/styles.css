@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root{font-family:'DM Sans',sans-serif;color:#20231f;background:#f5f4ef;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+::selection{background:#f36b35;color:white}
+.eyebrow{@apply text-[10px] font-bold tracking-[.24em] text-safety uppercase}
+.section-title{@apply font-display text-4xl md:text-5xl font-bold tracking-tight mt-3 leading-[1.05]}
+.field{@apply w-full bg-paper border border-line rounded-xl px-4 py-3.5 text-sm outline-none focus:border-safety transition}
+a{transition:color .2s ease}

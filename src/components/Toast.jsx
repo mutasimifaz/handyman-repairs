@@ -1,0 +1,2 @@
+import { useEffect, useState } from 'react'
+export default function Toast(){const [msg,setMsg]=useState('');useEffect(()=>{const h=e=>{setMsg(e.detail);setTimeout(()=>setMsg(''),3200)};window.addEventListener('app-toast',h);return()=>window.removeEventListener('app-toast',h)},[]);return msg?<div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[100] bg-ink text-white rounded-full px-6 py-3 shadow-soft text-sm">{msg}</div>:null}

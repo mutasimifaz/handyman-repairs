@@ -1,0 +1,10 @@
+name = "handyman-payment-worker"
+main = "src/index.js"
+compatibility_date = "2026-10-30"
+workers_dev = true
+
+[vars]
+# Exact origin of your deployed frontend, e.g. https://your-site.pages.dev
+ALLOWED_ORIGIN = "http://localhost:5173"
+FIREBASE_PROJECT_ID = "handyman-repairs"
+CURRENCY = "bdt"
