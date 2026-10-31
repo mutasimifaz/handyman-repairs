@@ -1,0 +1,24 @@
+HANDYMAN - IMAGE UPLOAD FALLBACK + STRIPE CHECKOUT BRANDING
+
+IMAGE UPLOAD ORDER
+1) The Worker tries ImgBB first.
+2) If ImgBB is not configured or its upload fails, it automatically tries Cloudinary.
+3) The browser never receives either provider secret. Both providers are called from the Cloudflare Worker.
+
+CLOUDFLARE SECRETS
+Run these from handyman-lates/payment-worker only if a secret is not already configured (or if you are rotating it):
+  npx wrangler secret put IMGBB_API_KEY
+  npx wrangler secret put CLOUDINARY_CLOUD_NAME
+  npx wrangler secret put CLOUDINARY_API_KEY
+  npx wrangler secret put CLOUDINARY_API_SECRET
+
+Cloudinary uses a signed upload generated in the Worker. Do not put the Cloudinary API secret or ImgBB key in a VITE_ variable. The uploaded .env contained a VITE_IMGBB_API_KEY, which exposes that key to frontend visitors. Rotate that ImgBB key in its provider dashboard, then save the replacement as the Worker secret above. The private .env is intentionally excluded from this ZIP.
+
+DEPLOY
+  npx wrangler deploy
+
+STRIPE CHECKOUT LOOK
+This project uses Stripe-hosted Checkout. Its logo, checkout font, colors, and button shape are controlled in Stripe Dashboard > Settings > Branding > Checkout styling (the exact navigation wording can vary). Save the branding while viewing the same test-mode account/data context used by your test secret key. Upload your HandyMan logo there and choose a font/color palette. The Stripe-hosted Checkout page cannot be fully restyled by CSS in this React project. Stripe's test-mode indicator is part of the test environment and should not be hidden; it disappears when the account is switched to live credentials after the business is ready for real payments. Do not switch to live mode just to remove the test label.
+
+REVIEW RULES
+New reviews require an order with paymentStatus=paid AND status=completed. Each order has one deterministic review document; resubmitting that order edits its existing review. Another completed order can have its own separate review. The public product review query no longer uses the productId+createdAt composite index.

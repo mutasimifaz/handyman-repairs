@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase'
 import { getProducts, saveProduct, removeProduct, getAllOrders } from '../lib/data'
 import { uploadImages } from '../lib/upload'
 import { useAuth } from '../context/AuthContext'
@@ -21,7 +19,7 @@ const uniqueFiles = files => {
 const uniqueUrls = urls => [...new Set(urls.filter(Boolean))]
 
 export default function Admin() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
   const [tab, setTab] = useState('products')
@@ -108,10 +106,19 @@ export default function Admin() {
   }
 
   const setStatus = async (order, status) => {
+    const workerUrl = import.meta.env.VITE_PAYMENT_WORKER_URL?.replace(/\/+$/, '')
+    if (!workerUrl) return toast('Payment Worker URL is missing from the frontend environment.')
     try {
-      await updateDoc(doc(db, 'orders', order.id), { status })
+      const token = await user.getIdToken()
+      const response = await fetch(`${workerUrl}/admin/order-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: order.id, status }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Could not update order.')
       await refresh()
-      toast('Order updated')
+      toast(result.stockRestored ? 'Order cancelled · stock restored' : 'Order updated')
     } catch (error) { toast(error.message) }
   }
 

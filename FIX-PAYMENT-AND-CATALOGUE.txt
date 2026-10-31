@@ -1,0 +1,52 @@
+HANDYMAN - PAYMENT + CATALOGUE FIX
+
+WHAT THIS PATCH CHANGES
+1. Homepage now loads up to 6 products (instead of 3).
+2. Product cards use a regular responsive grid and no longer make the first card span two columns.
+3. Product cards keep consistent alignment and show product images with contain sizing.
+4. IMPORTANT PAYMENT FIX:
+   - After Stripe sends the customer back to /payment/success, the page now asks the Worker to verify the Checkout Session directly with Stripe.
+   - The Worker checks the real Stripe session, verifies that it is paid and belongs to the signed-in customer, then updates the Firestore order and product stock together.
+   - This gives the customer-return flow a direct confirmation path instead of relying only on a webhook arriving first.
+   - The existing Stripe webhook is retained. Both paths use the same idempotent stock update, so a webhook and the return-page confirmation cannot decrement the same order twice.
+   - Product stock is read from available_quantity (the field used by the Admin page), with stock as a fallback.
+   - If stock is no longer sufficient after payment, the order is marked stock_conflict and stock is not made negative.
+
+FILES CHANGED
+- src/pages/Home.jsx
+- src/components/ProductCard.jsx
+- src/pages/PaymentResult.jsx
+- payment-worker/src/index.js
+
+IMPORTANT: DEPLOY BOTH PARTS
+A. FRONTEND
+- Replace these three frontend files in your project.
+- Push the changes to your GitHub repository. Your connected frontend hosting should build from that push.
+
+B. PAYMENT WORKER
+- Replace payment-worker/src/index.js in your Worker project.
+- Deploy the Worker update to the existing Worker named handyman-payment-worker.
+- Keep the existing Worker secrets. Do not delete or recreate them.
+- In the Cloudflare Worker settings, make sure ALLOWED_ORIGIN is the exact public website origin (for example, https://your-site.example), not http://localhost:5173. Do not change it to a guessed domain.
+- Keep FIREBASE_PROJECT_ID set to handyman-repairs.
+- Keep the existing Stripe and Firebase secrets already configured in Cloudflare.
+
+TEST
+1. Open a product with stock greater than zero.
+2. Buy quantity 1 using Stripe test mode.
+3. After Stripe returns to the website, the page should show "Payment verified" and "Stock has been updated."
+4. Refresh the Admin product list. Its stock should be lower by exactly 1.
+5. Cancel another checkout. Its stock should not change.
+6. If the customer closes the browser before returning, the Stripe webhook still needs to be configured to process the payment in the background.
+
+SECURITY
+- The private .env file from the uploaded archive is NOT included.
+- Keep your own .env locally. Do not upload it publicly.
+- The .env.example file contains placeholders only.
+- Never paste Stripe secret keys or Firebase service-account JSON into chat.
+
+VALIDATION PERFORMED
+- Worker JavaScript passed `node --check`.
+- The three changed JSX files passed TypeScript's JSX parser/transpiler syntax check.
+- A full Vite production build was NOT run because dependency installation timed out in this environment.
+- No live Stripe payment or live Firestore write was performed here. The test steps above are required to verify the deployed configuration.

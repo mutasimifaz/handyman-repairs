@@ -1,0 +1,17 @@
+HANDYMAN REVIEW PERFORMANCE UPDATE
+
+Changes in this patch:
+- Product pages load at most 20 public reviews initially (configurable in getReviews).
+- Public reviews are queried by productId only, avoiding the composite index that was previously required.
+- Review eligibility now fetches the customer's completed orders and review records concurrently.
+- Eligibility matches reviews to orders in memory instead of making one sequential Firestore document request per completed order.
+- The Worker bounds each user-scoped query to 100 records to avoid unbounded reads.
+- The frontend caches purchase eligibility for 30 seconds per signed-in user and product. The server still revalidates eligibility on every review submission; the cache is forcibly refreshed after a submission.
+- Review loading skeletons are shown while public reviews and purchase eligibility are loading.
+
+Important:
+- The Worker must be redeployed for the server-side query optimization.
+- The frontend must be rebuilt/redeployed (or run locally) for the review limit, cache and loading UI changes.
+- This patch does not weaken the rule: only paid, completed, non-cancelled orders can create/edit their associated review.
+- Public review display is limited to the first 20 matching records for initial load. Pagination can be added later if you want visitors to browse the full history.
+- No .env file or secret values are included.

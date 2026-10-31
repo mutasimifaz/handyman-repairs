@@ -1,0 +1,29 @@
+HANDYMAN PATCH: CANCELLATION STOCK RESTORE + PURCHASE-ONLY REVIEWS
+
+WHAT CHANGED
+1. When an admin marks a PAID order as cancelled, the Worker restores that order's quantity to the product's available_quantity field (or stock field for older products).
+2. The order and product stock are updated together in one Firestore commit with update-time preconditions. The order receives stockRestored=true so a repeated cancellation cannot add the same quantity twice.
+3. Unpaid/failed checkout cancellations do not add stock because stock was never deducted for them.
+4. Cancelled orders cannot be reopened from the admin status selector. This avoids an ambiguous inventory state after stock has been returned.
+5. Product pages load and display existing reviews. The review form is only rendered for a signed-in user with a paid, non-cancelled order for that product. If there are no old reviews and the visitor is not eligible, the reviews area is not rendered.
+6. The Worker still checks purchase eligibility again when a review is submitted; hiding the form is not the security boundary.
+7. ProductCard's image area uses bg-white as requested.
+
+DEPLOYMENT
+- Replace/update the frontend files from this project as usual.
+- Deploy the updated Cloudflare Worker from the payment-worker folder:
+    npx wrangler deploy
+- Keep the existing Cloudflare Worker secrets. Do not delete or recreate them.
+- Ensure ALLOWED_ORIGIN in Cloudflare matches the frontend origin being tested (for local Vite this is usually http://localhost:5173).
+- Ensure the existing Worker service account has Firestore access to read users, orders, and products and commit writes. The admin profile must have role="admin" in users/{uid}.
+
+TEST CHECKLIST
+A. Paid order quantity 2: note stock, mark order cancelled in Admin, confirm stock increases by 2 and order status is cancelled.
+B. Refresh Admin and confirm stock did not increase a second time.
+C. Cancel an unpaid order: confirm stock does not change.
+D. Visit a product as a signed-out/non-purchasing account: old reviews should show, but no form.
+E. Sign in with an account that has a paid, non-cancelled order for that product: the form should appear.
+F. Try submitting a review without a qualifying purchase: Worker should reject it.
+
+VALIDATION NOTE
+The Worker source passed `node --check`. A full Vite build and live Firestore/Stripe test were not run in this environment. Test with a non-critical order before relying on this in production.

@@ -6,12 +6,47 @@ import { useAuth } from '../context/AuthContext'
 import { toast } from '../lib/toast'
 
 const PAYMENT_WORKER_URL = import.meta.env.VITE_PAYMENT_WORKER_URL?.replace(/\/+$/, '')
+const REVIEW_ELIGIBILITY_CACHE_MS = 30_000
+const reviewEligibilityCache = new Map()
+
+async function loadReviewEligibility(user, productId, forceRefresh = false) {
+  const cacheKey = `${user.uid}:${productId}`
+  const cached = reviewEligibilityCache.get(cacheKey)
+  if (!forceRefresh && cached && Date.now() - cached.savedAt < REVIEW_ELIGIBILITY_CACHE_MS) return cached.value
+  const token = await user.getIdToken()
+  const response = await fetch(`${PAYMENT_WORKER_URL}/review-eligibility`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ productId })
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(result.error || 'Could not verify purchase.')
+  const value = Array.isArray(result.eligibleOrders) ? result.eligibleOrders : []
+  reviewEligibilityCache.set(cacheKey, { value, savedAt: Date.now() })
+  return value
+}
 
 export default function ProductDetail() {
   const { id } = useParams(), navigate = useNavigate(), { user } = useAuth()
   const [p, setP] = useState(null), [reviews, setReviews] = useState([]), [image, setImage] = useState(0)
-  const [qty, setQty] = useState(1), [review, setReview] = useState(''), [rating, setRating] = useState(5), [busy, setBusy] = useState(false)
-  useEffect(() => { setP(null); getProduct(id).then(setP).catch(e => toast(e.message)); getReviews(id).then(setReviews).catch(() => {}) }, [id])
+  const [qty, setQty] = useState(1), [review, setReview] = useState(''), [rating, setRating] = useState(5), [busy, setBusy] = useState(false), [reviewBusy, setReviewBusy] = useState(false), [eligibleOrders, setEligibleOrders] = useState([]), [selectedOrderId, setSelectedOrderId] = useState('')
+  const [reviewsLoading, setReviewsLoading] = useState(true), [eligibilityLoading, setEligibilityLoading] = useState(false)
+  const selectedReviewOrder = eligibleOrders.find(order => order.orderId === selectedOrderId) || eligibleOrders[0]
+  useEffect(() => {
+    let active = true
+    setP(null); setReviews([]); setEligibleOrders([]); setSelectedOrderId(''); setReview(''); setRating(5)
+    setReviewsLoading(true)
+    setEligibilityLoading(Boolean(user && PAYMENT_WORKER_URL))
+    getProduct(id).then(value => { if (active) setP(value) }).catch(e => toast(e.message))
+    getReviews(id).then(value => { if (active) setReviews(value) }).catch(() => {}).finally(() => { if (active) setReviewsLoading(false) })
+    if (user && PAYMENT_WORKER_URL) {
+      loadReviewEligibility(user, id)
+        .then(list => { if (active) { setEligibleOrders(list); setSelectedOrderId(list[0]?.orderId || ''); setReview(list[0]?.comment || ''); setRating(list[0]?.rating || 5) } })
+        .catch(() => { if (active) { setEligibleOrders([]); setSelectedOrderId('') } })
+        .finally(() => { if (active) setEligibilityLoading(false) })
+    }
+    return () => { active = false }
+  }, [id, user?.uid])
   if (!p) return <div className="max-w-7xl mx-auto px-5 py-24 text-center text-muted">Loading product…</div>
   const imgs = p.images?.length ? p.images : [p.image].filter(Boolean)
   const stock = Number(p.available_quantity ?? p.stock ?? 0)
@@ -37,16 +72,22 @@ export default function ProductDetail() {
     e.preventDefault()
     if (!user) return navigate('/signin')
     if (!review.trim()) return
+    setReviewBusy(true)
     try {
-      await addReview({ uid: user.uid, email: user.email, name: user.displayName || 'Customer', productId: id, rating, comment: review.trim() })
-      setReview(''); setReviews(await getReviews(id)); toast('Review submitted')
-    } catch (error) { toast(error.message) }
+      if (!selectedReviewOrder?.orderId) throw new Error('Choose a completed order first.')
+      const result = await addReview({ name: user.displayName || user.email || 'Verified customer', productId: id, orderId: selectedReviewOrder.orderId, rating, comment: review.trim() }, await user.getIdToken())
+      setReviews(await getReviews(id))
+      const list = await loadReviewEligibility(user, id, true)
+      const current = list.find(order => order.orderId === selectedReviewOrder.orderId) || list[0]
+      setEligibleOrders(list); setSelectedOrderId(current?.orderId || ''); setReview(current?.comment || ''); setRating(current?.rating || 5)
+      toast(result.updated ? 'Review updated' : 'Review submitted')
+    } catch (error) { toast(error.message) } finally { setReviewBusy(false) }
   }
   return <div className="max-w-7xl mx-auto px-5 py-8 md:py-12">
     <Link to="/products" className="inline-flex items-center gap-2 text-sm text-muted mb-7 hover:text-ink"><ArrowLeft size={16}/> Back to catalogue</Link>
     <div className="grid lg:grid-cols-[1.05fr_.95fr] gap-8 lg:gap-16">
-      <div><div className="rounded-[24px] md:rounded-[30px] overflow-hidden bg-[#e9e8e0] aspect-[5/4]"><img src={imgs[image] || 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=900'} alt={p.name} className="w-full h-full object-cover"/></div>
-        {imgs.length > 1 && <div className="grid grid-cols-5 gap-2 sm:gap-3 mt-3">{imgs.map((src, i) => <button key={`${src}-${i}`} onClick={() => setImage(i)} aria-label={`View image ${i + 1}`} className={`aspect-square overflow-hidden rounded-xl border-2 ${image === i ? 'border-safety' : 'border-transparent'}`}><img src={src} alt="" className="w-full h-full object-cover"/></button>)}</div>}
+      <div><div className="rounded-[24px] md:rounded-[30px] overflow-hidden bg-white aspect-[5/4]"><img src={imgs[image] || 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=900'} alt={p.name} className="w-full h-full object-contain p-5 sm:p-8"/></div>
+        {imgs.length > 1 && <div className="grid grid-cols-5 gap-2 sm:gap-3 mt-3">{imgs.map((src, i) => <button key={`${src}-${i}`} onClick={() => setImage(i)} aria-label={`View image ${i + 1}`} className={`aspect-square overflow-hidden rounded-xl border-2 ${image === i ? 'border-safety' : 'border-transparent'}`}><img src={src} alt="" className="w-full h-full object-contain p-5 sm:p-8"/></button>)}</div>}
       </div>
       <div className="lg:sticky lg:top-28 h-fit"><p className="eyebrow">{p.category || 'WORKSHOP ESSENTIAL'}</p><h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mt-3">{p.name}</h1><p className="font-display text-3xl font-bold mt-5">৳{Number(p.price || 0).toLocaleString()}</p><p className="text-muted leading-7 mt-5">{p.short_description || p.description || 'A dependable addition to your workshop.'}</p>
         <div className="flex items-center gap-2 text-xs mt-5"><span className={`h-2 w-2 rounded-full ${stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}/>{stock > 0 ? `${stock} available` : 'Currently unavailable'}</div>
@@ -56,9 +97,11 @@ export default function ProductDetail() {
         <p className="text-[11px] text-muted mt-3 flex items-center gap-2"><ShieldCheck size={14}/> Payment confirmation is verified by the payment server.</p>
       </div>
     </div>
-    <section className="mt-20 md:mt-24 max-w-3xl"><p className="eyebrow">CUSTOMER NOTES</p><h2 className="font-display text-3xl font-bold mt-2">Reviews <span className="text-muted font-sans text-base">({reviews.length})</span></h2>
-      <form onSubmit={submitReview} className="bg-white border border-line rounded-2xl p-4 sm:p-5 mt-6"><p className="font-semibold text-sm mb-3">Share your experience</p><div className="flex gap-1 mb-3">{[1,2,3,4,5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`Rate ${n} stars`}><Star size={19} className={n <= rating ? 'fill-safety text-safety' : 'text-line'}/></button>)}</div><textarea value={review} onChange={e => setReview(e.target.value)} placeholder="What should other makers know?" className="w-full min-h-24 bg-paper rounded-xl p-4 text-sm outline-none"/><button className="mt-3 rounded-full bg-ink text-white px-5 py-3 text-sm font-bold">Submit review</button></form>
-      <div className="mt-6 grid gap-4">{reviews.map(r => <article key={r.id} className="border-b border-line pb-4"><div className="flex justify-between gap-3"><b className="text-sm">{r.name}</b><span className="text-xs text-safety whitespace-nowrap">★ {r.rating}/5</span></div><p className="text-sm text-muted mt-2 leading-6">{r.comment}</p></article>)}</div>
-    </section>
+    {(reviewsLoading || eligibilityLoading || eligibleOrders.length > 0 || reviews.length > 0) && <section className="mt-20 md:mt-24 max-w-3xl" aria-busy={reviewsLoading || eligibilityLoading}>{(reviewsLoading || reviews.length > 0) && <><p className="eyebrow">CUSTOMER NOTES</p><h2 className="font-display text-3xl font-bold mt-2">Reviews {reviewsLoading ? <span className="text-muted font-sans text-base">Loading…</span> : <span className="text-muted font-sans text-base">({reviews.length})</span>}</h2></>}
+      {reviewsLoading && <div className="mt-6 grid gap-4" aria-label="Loading reviews"><div className="h-20 rounded-xl bg-paper animate-pulse"/><div className="h-20 rounded-xl bg-paper animate-pulse"/></div>}
+      {eligibilityLoading && <div className="mt-6 rounded-2xl border border-line p-4 text-xs text-muted">Checking completed purchases…</div>}
+      {eligibleOrders.length > 0 && <form onSubmit={submitReview} className="bg-white border border-line rounded-2xl p-4 sm:p-5 mt-6"><p className="font-semibold text-sm mb-1">{selectedReviewOrder?.hasReview ? 'Edit your review' : 'Verified-purchase review'}</p><p className="text-xs text-muted mb-3">Only completed, paid orders are eligible. Each order has its own review.</p>{eligibleOrders.length > 1 && <select value={selectedOrderId} onChange={event => { const next = eligibleOrders.find(order => order.orderId === event.target.value); setSelectedOrderId(event.target.value); setReview(next?.comment || ''); setRating(next?.rating || 5) }} className="field mb-3">{eligibleOrders.map(order => <option key={order.orderId} value={order.orderId}>Order {order.orderId.slice(0, 8)} · {order.hasReview ? 'Edit review' : 'Write review'}</option>)}</select>}<div className="flex gap-1 mb-3">{[1,2,3,4,5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`Rate ${n} stars`}><Star size={19} className={n <= rating ? 'fill-safety text-safety' : 'text-line'}/></button>)}</div><textarea required value={review} onChange={e => setReview(e.target.value)} placeholder="What should other makers know?" className="w-full min-h-24 bg-paper rounded-xl p-4 text-sm outline-none"/><button disabled={reviewBusy} className="mt-3 rounded-full bg-ink text-white px-5 py-3 text-sm font-bold disabled:opacity-50">{reviewBusy ? 'Saving…' : selectedReviewOrder?.hasReview ? 'Save changes' : 'Submit review'}</button></form>}
+      {!reviewsLoading && reviews.length > 0 && <div className="mt-6 grid gap-4">{reviews.map(r => <article key={r.id} className="border-b border-line pb-4"><div className="flex justify-between gap-3"><b className="text-sm">{r.name}</b>{r.verifiedPurchase && <span className="text-[10px] uppercase tracking-wider text-emerald-700">Verified purchase</span>}<span className="text-xs text-safety whitespace-nowrap">★ {r.rating}/5</span></div><p className="text-sm text-muted mt-2 leading-6">{r.comment}</p></article>)}</div>}
+    </section>}
   </div>
 }

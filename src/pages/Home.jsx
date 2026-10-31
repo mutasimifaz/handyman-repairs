@@ -16,7 +16,7 @@ const benefits = [
 export default function Home() {
   const [products, setProducts] = useState([])
   useEffect(() => { getProducts().then(setProducts).catch(() => setProducts([])) }, [])
-  const items = products.length ? products.slice(0, 3) : fallback
+  const items = products.length ? products.slice(0, 6) : fallback
   return <div className="home-page">
     <section className="hero-wrap"><div className="hero-grid">
       <div className="hero-copy">
@@ -39,7 +39,7 @@ export default function Home() {
     </div><div className="hero-bottomline"><span>GOOD WORK STARTS HERE</span><span className="hero-bottom-mark"><Boxes size={15}/> TOOLS · WORKSHOP · EVERYDAY</span></div></section>
 
     <section className="featured-section"><div className="section-heading-row"><div><p className="eyebrow">THE SHORTLIST</p><h2 className="section-title">Useful tools.<br className="sm:hidden"/> Serious potential.</h2><p className="section-intro">A few workshop favourites worth a closer look.</p></div><Link to="/products" className="text-link">View all products <ArrowUpRight size={16}/></Link></div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7">{items.map((p, i) => <ProductCard key={p.id} product={p} index={i}/>)}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7 items-stretch">{items.map((p) => <ProductCard key={p.id} product={p}/>)}</div>
       {!products.length && <p className="text-xs text-muted mt-5">Preview items are shown until your Firebase catalogue is populated.</p>}
     </section>
 

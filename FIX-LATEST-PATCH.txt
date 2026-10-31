@@ -1,0 +1,47 @@
+HANDYMAN PATCH NOTES
+
+Changes made to the supplied latest project:
+
+1) Product image publishing
+- Restored the missing POST /upload-image Cloudflare Worker endpoint.
+- It verifies the Firebase sign-in token and checks the user's Firestore profile role is admin.
+- It validates image type and the existing 8 MB limit, then uploads to ImgBB.
+- The Admin page already calls this endpoint through src/lib/upload.js. The missing route was why the browser received "Not Found" after Publish.
+- The Worker expects the ImgBB API key as a Cloudflare Worker secret named IMGBB_API_KEY. It must not be put in VITE_ frontend variables.
+
+2) Review eligibility and per-order editing
+- A customer can review only when that exact product order has paymentStatus="paid" AND status="completed".
+- Pending, processing, shipped, unpaid, cancelled, and stock-conflict orders are not eligible.
+- Each review is stored using the order ID as its Firestore document ID. That enforces one review per order.
+- Submitting again for the same order edits the existing review. A second completed order for the same product gets its own review.
+- The Worker verifies ownership and completed/paid status on every create/edit request.
+- The eligibility query filters only by uid to avoid the composite-index error. The public review list also sorts in the browser after a single-field query.
+
+3) Preserved the supplied design
+- ProductCard image container retains bg-white.
+- Product detail main image container retains bg-white.
+
+DEPLOYMENT
+
+A. Frontend
+- Keep your own .env file locally; this ZIP intentionally excludes it.
+- Run npm install, then npm run dev to test.
+- When ready, publish the frontend using your existing hosting workflow.
+
+B. Cloudflare Worker
+- Open a terminal in payment-worker.
+- Ensure the existing Worker secret IMGBB_API_KEY is set. If it is missing, create/rotate an ImgBB API key and run:
+    npx wrangler secret put IMGBB_API_KEY
+  Paste the key into the hidden terminal prompt. Do not put it in .env or commit it to GitHub.
+- Existing Firebase and Stripe Worker secrets are not changed by this patch.
+- Deploy the updated Worker:
+    npx wrangler deploy
+- Keep ALLOWED_ORIGIN set to the exact frontend origin you are testing (localhost during local testing; production origin when live).
+
+C. Review workflow
+- Mark an order Completed in Admin only after it has actually been fulfilled.
+- The review form appears only for paid orders whose status is Completed.
+
+IMPORTANT
+- No live ImgBB upload, Stripe payment, or Firestore mutation was performed during this patch. Test with one product image and one completed test order before relying on it in production.
+- Older reviews created before this patch remain visible. They were not linked to an order ID, so they cannot be mapped into per-order edit controls automatically.
