@@ -3,10 +3,20 @@ const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(d
   headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
 })
 
-function cors(origin, allowed) {
-  const permitted = origin === allowed || (allowed === '*' && origin)
+function getAllowedOrigins(env) {
+  return new Set([
+    'http://localhost:5173',
+    'https://handyman-repairs.pages.dev',
+    ...(env.ALLOWED_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean),
+    ...(env.ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean),
+  ])
+}
+
+function cors(origin, allowedOrigins) {
+  const permitted = allowedOrigins.has(origin)
+
   return {
-    'access-control-allow-origin': permitted ? origin : allowed,
+    ...(permitted ? { 'access-control-allow-origin': origin } : {}),
     'access-control-allow-methods': 'POST, OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
     'access-control-max-age': '86400',
@@ -148,8 +158,8 @@ async function uploadProductImage(request, env) {
   }
 }
 
-async function createCheckout(request, env) {
-  const user = await verifyFirebaseUser(request, env)
+async function createCheckout(request, env, origin) {
+    const user = await verifyFirebaseUser(request, env)
   const body = await request.json()
   const productId = String(body.productId || '')
   const quantity = Math.max(1, Math.min(10, Math.floor(Number(body.quantity) || 1)))
@@ -177,8 +187,8 @@ async function createCheckout(request, env) {
 
   const form = new URLSearchParams({
     mode: 'payment',
-    success_url: `${env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&order_id=${orderId}`,
-    cancel_url: `${env.FRONTEND_URL}/payment/cancel?order_id=${orderId}`,
+    success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}&order_id=${orderId}`,
+cancel_url: `${origin}/payment/cancel?order_id=${orderId}`,
     customer_email: user.email,
     client_reference_id: orderId,
     'metadata[orderId]': orderId,
@@ -526,40 +536,41 @@ async function handleWebhook(request, env) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('origin') || ''
-    const headers = cors(origin, env.ALLOWED_ORIGIN || 'http://localhost:5173')
+const allowedOrigins = getAllowedOrigins(env)
+const headers = cors(origin, allowedOrigins)
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers })
     const url = new URL(request.url)
     try {
       if (url.pathname === '/upload-image' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY) return json({ error: 'Image upload service is not configured.' }, 503, headers)
         return json(await uploadProductImage(request, env), 200, headers)
       }
       if (url.pathname === '/webhook' && request.method === 'POST') return await handleWebhook(request, env)
       if (url.pathname === '/review-eligibility' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY) return json({ error: 'Review service is not configured.' }, 503, headers)
         return json(await checkReviewEligibility(request, env), 200, headers)
       }
       if (url.pathname === '/admin/order-status' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY) return json({ error: 'Order service is not configured.' }, 503, headers)
         return json(await updateOrderStatus(request, env), 200, headers)
       }
       if (url.pathname === '/reviews' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY) return json({ error: 'Review service is not configured.' }, 503, headers)
         return json(await createVerifiedReview(request, env), 201, headers)
       }
       if (url.pathname === '/confirm-payment' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.STRIPE_SECRET_KEY || !env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY) return json({ error: 'Payment confirmation service is not configured.' }, 503, headers)
         return json(await confirmCheckout(request, env), 200, headers)
       }
       if (url.pathname === '/create-checkout-session' && request.method === 'POST') {
-        if (origin !== (env.ALLOWED_ORIGIN || 'http://localhost:5173')) return json({ error: 'Origin not allowed.' }, 403, headers)
+        if (!allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, headers)
         if (!env.STRIPE_SECRET_KEY || !env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID || !env.FRONTEND_URL) return json({ error: 'Payment service is not configured yet.' }, 503, headers)
-        return json(await createCheckout(request, env), 200, headers)
+        return json(await createCheckout(request, env, origin), 200, headers)
       }
       return json({ error: 'Not found' }, 404, headers)
     } catch (error) {
